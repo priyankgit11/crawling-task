@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CrawlingTask")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+36f4b9bd14692dd5c507c5afd8b1ede6f1e31bee")]
 [assembly: System.Reflection.AssemblyProductAttribute("CrawlingTask")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CrawlingTask")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

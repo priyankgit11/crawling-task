@@ -129,3 +129,4 @@ D:\Tutorials\c#\CrawlingTask\CrawlingTask\obj\Debug\net8.0\CrawlingTask.pdb
 D:\Tutorials\c#\CrawlingTask\CrawlingTask\obj\Debug\net8.0\CrawlingTask.genruntimeconfig.cache
 D:\Tutorials\c#\CrawlingTask\CrawlingTask\obj\Debug\net8.0\ref\CrawlingTask.dll
 D:\Tutorials\c#\CrawlingTask\CrawlingTask\bin\Debug\net8.0\HtmlAgilityPack.dll
+D:\Tutorials\c#\CrawlingTask\CrawlingTask\obj\Debug\net8.0\CrawlingTask.sourcelink.json

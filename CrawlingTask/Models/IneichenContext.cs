@@ -17,7 +17,8 @@ public partial class IneichenContext : DbContext
 
     public virtual DbSet<Auction> Auctions { get; set; }
 
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) => optionsBuilder.UseSqlServer("Data Source=(LocalDb)\\MSSQLLocalDB;Initial Catalog=Ineichen;Integrated Security=True");
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        => optionsBuilder.UseSqlServer("Server=(localdb)\\mssqllocaldb;Database=Ineichen;Trusted_Connection=True;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,7 +26,7 @@ public partial class IneichenContext : DbContext
         {
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.Description)
-                .HasMaxLength(100)
+                .HasMaxLength(200)
                 .IsUnicode(false)
                 .HasColumnName("description");
             entity.Property(e => e.EndDate).HasColumnName("end_date");

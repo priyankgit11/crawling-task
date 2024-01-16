@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using CrawlingTask.Models;
 using HtmlAgilityPack;
+using Microsoft.IdentityModel.Tokens;
 
 namespace CrawlingTask
 {
@@ -41,6 +42,7 @@ namespace CrawlingTask
             foreach (var Card in auctionCards)
             {
                 Auction auctionObj = new Auction();
+
                 // Extract Title
                 var title = Card.SelectSingleNode($"div[contains(@class, 'auction-item__title')]");
                 if (title != null)
@@ -62,47 +64,118 @@ namespace CrawlingTask
                     desc += result + "\n";
                 }
                 Console.WriteLine("DESC" + desc);
+                auctionObj.Description = desc;
+
+                // Extract Dates
                 var dateItem = dateAndLocation.SelectSingleNode($"div[contains(@class, 'auction-date-location__item')]");
-                string startDateString = "", endDateString = "";
-                SeparateDates(dateItem.InnerText.Trim(),out startDateString,out endDateString);
-                GetDates(startDateString.Trim());
+                SetAuctionDates(auctionObj, dateItem.InnerText.Trim());
+
+                // Extract Image-Url
+                var imageItem = Card.SelectSingleNode($"a[contains(@class, 'auction-item__image')]/img");
+                var imageUrl = imageItem.GetAttributeValue("src", null);
+                if (imageUrl.IsNullOrEmpty()) auctionObj.ImageUrl = null;
+                else auctionObj.ImageUrl = imageUrl.Trim();
+
+                // Extract LotCount and URL
+                var linkButton = Card.SelectSingleNode($"div[contains(@class, 'auction-item__btns')]/a");
+                var link = linkButton.GetAttributeValue("href", null);
+                Console.WriteLine(link);
+                auctionObj.Link = link.Trim();
+                var btnText = linkButton.InnerText.Trim();
+                var lotCount = ExtractNumFromStr(btnText);
+                auctionObj.LotCount = lotCount;
+                Console.WriteLine("URL "+ auctionObj.Link);
+                Console.WriteLine("LOT COUNT "+ auctionObj.LotCount);
+
+                //Extract Location
+                var locationItem = dateAndLocation.SelectSingleNode($"div[contains(@class, 'auction-date-location__item')][2]");
+                var locationText = locationItem.InnerText.Trim();
+                string[] locationSplits = Regex.Split(locationText, @"((Auction,)|(Auction \|))");
+                auctionObj.Location = locationSplits[locationSplits.Length - 1];
+                await Console.Out.WriteLineAsync("LOCATION " + locationSplits[locationSplits.Length-1]);
+
+                using (IneichenContext Context = new IneichenContext())
+                {
+                    Context.Auctions.Add(auctionObj);
+                    Context.SaveChanges();
+                }
             }
+        }
+        public static void SetAuctionDates(Auction auction, string inputDateString)
+        {
+            DateClass? startDateObj = null, endDateObj = null;
+
+            SetAuctionDatesHelper(inputDateString, out startDateObj, out endDateObj);
+            if (startDateObj == null) return;
+            auction.StartDate = startDateObj.date;
+            auction.StartMonth = startDateObj.month;
+            auction.StartYear = startDateObj.year;
+            auction.StartTime = startDateObj.time;
+            if (endDateObj == null) return;
+            auction.EndDate = endDateObj.date;
+            auction.EndMonth = endDateObj.month;
+            auction.EndYear = endDateObj.year;
+            auction.EndTime = endDateObj.time;
+            return;
+        }
+        public static void SetAuctionDatesHelper(string inputDateString, out DateClass? startDateObj, out DateClass? endDateObj)
+        {
+            string startDateString = "", endDateString = "";
+            SeparateDates(inputDateString, out startDateString, out endDateString);
+            Console.WriteLine("START DATE STRING " + startDateString);
+            startDateObj = GetDate(startDateString.Trim());
+            if (startDateObj == null)
+            {
+                endDateObj = null;
+                return;
+            }
+            Console.WriteLine("END DATE STRING " + endDateString);
+            endDateObj = GetDate(endDateString.Trim());
         }
         public static void SeparateDates(string inputDates, out string startDateString, out string endDateString)
         {
-            string[] split = Regex.Split(inputDates, @"(\(CET\))|(CET)|-");
+            //string[] split = Regex.Split(inputDates, @"(\(CET\))|(CET)|-");
+            string[] split = inputDates.Split(Regex.Match(inputDates, @"(\(CET\))|(CET)|-").Groups[0].Value);
             startDateString = split[0];
             if (split.Length > 1)
             {
                 endDateString = split[1];
             }
-            endDateString = "";
+            else
+                endDateString = "";
             return;
         }
-        public static DateClass? GetDates(string dateInnerText)
+        public static DateClass? GetDate(string dateInnerText)
         {
+            DateClass dateObj = new DateClass();
             Regex regexDateExists = new Regex(@"^\d{1,2}");
             Regex regexStartMonth = new Regex(@"\b[A-Za-z]+\b");
-            Regex regexStartYear = new Regex(@"([0-4]{4})");
+            Regex regexStartYear = new Regex(@"([0-9]{4})");
             Regex regexStartTime = new Regex(@"(([0-9]{2}):([0-9]{2}))");
             if (regexDateExists.IsMatch(dateInnerText))
             {
                 var match = regexDateExists.Match(dateInnerText);
-                Console.WriteLine("START DATE " + match.Groups[0].Value);
+                dateObj.date = ExtractNumFromStr(match.Groups[0].Value);
+                Console.WriteLine("DATE " + match.Groups[0].Value);
                 if (regexStartMonth.IsMatch(dateInnerText))
                 {
                     var startMonthMatch = regexStartMonth.Match(dateInnerText);
-                    Console.WriteLine("START MONTH " + startMonthMatch.Groups[0].Value);
+                    int monthNum = GetMonthNumber(startMonthMatch.Groups[0].Value);
+                    dateObj.month = monthNum;
+                    Console.WriteLine("MONTH " + GetMonthNumber(startMonthMatch.Groups[0].Value));
                 }
                 if (regexStartYear.IsMatch(dateInnerText))
                 {
                     var startYearMatch = regexStartYear.Match(dateInnerText);
-                    Console.WriteLine("START YEAR " + startYearMatch.Groups[0].Value);
+                    int yearNum = Int32.Parse(startYearMatch.Groups[0].Value);
+                    dateObj.year = yearNum;
+                    Console.WriteLine("YEAR " + startYearMatch.Groups[0].Value);
                 }
                 if (regexStartTime.IsMatch(dateInnerText))
                 {
                     var startTime = regexStartTime.Match(dateInnerText);
-                    Console.WriteLine("START TIME " + startTime.Groups[0].Value);
+                    dateObj.time = TimeOnly.Parse(startTime.Groups[0].Value);
+                    Console.WriteLine("TIME " + startTime.Groups[0].Value);
                 }
             }
             else
@@ -110,8 +183,9 @@ namespace CrawlingTask
                 Console.WriteLine("NO DATES");
                 return null;
             }
-            return new DateClass();
+            return dateObj;
         }
+
         public static int GetMonthNumber(string monthString)
         {
             // Use DateTime.ParseExact to parse the month string and extract the month number
@@ -128,17 +202,21 @@ namespace CrawlingTask
                 return -1; // Or any other suitable value or throw an exception
             }
         }
+        public static int? ExtractNumFromStr(string str)
+        {
+            if (Regex.IsMatch(str, @"\d+"))
+            {
+                int num = Int32.Parse(Regex.Match(str, @"\d+").Value);
+                return num;
+            }
+            return null;
+        }
     }
     public class DateClass
     {
-        public int startDate { get; set; }
-        public int startMonth { get; set; }
-        public int startYear { get; set; }
-        public TimeOnly startTime { get; set; }
-        public int endDate { get; set; }
-        public int endMonth { get; set; }
-        public int endYear { get; set; }
-        public TimeOnly endTime { get; set; }
-
+        public int? date { get; set; }
+        public int? month { get; set; }
+        public int? year { get; set; }
+        public TimeOnly? time { get; set; }
     }
 }
