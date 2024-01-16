@@ -14,3 +14,28 @@ Take a look at auction results & hammer prices for the recently sold timepieces 
 6 FEB 2023 - 20 FEB 2023
 
 25 May, 2019
+
+
+
+Timed Auction, Zurich
+Live Auction | Hotel President Wilson, Geneva
+Saal Metropol Zürich Stadthausquai 11, CH-8001 Zürich
+
+
+
+
+Id (PrimaryKey) DONE
+Title DONE
+Description DONE
+ImageUrl DONE
+Link DONE 
+LotCount DONE
+StartDate DONE
+StartMonth DONE
+StartYear DONE
+StartTime DONE
+EndDate DONE
+EndMonth DONE
+EndYear DONE
+EndTime DONE
+Location

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using CrawlingTask.Models;
 using HtmlAgilityPack;
@@ -18,18 +19,7 @@ namespace CrawlingTask
             {
                 try
                 {
-                    HttpResponseMessage response = await client.GetAsync(webUrl);
-                    if (response.IsSuccessStatusCode)
-                    {
-                        string htmlContent = await response.Content.ReadAsStringAsync();
-
-                        // Parse the HTML content using HtmlAgilityPack
-                        htmlDocument.LoadHtml(htmlContent);
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Error: {response.StatusCode} - {response.ReasonPhrase}");
-                    }
+                    await BuildHtmlDocument(webUrl, client, htmlDocument);
                 }
                 catch (Exception ex)
                 {
@@ -37,69 +27,140 @@ namespace CrawlingTask
                 }
             }
             // Auction Cards Collection
-            var auctionCards = htmlDocument.DocumentNode.SelectNodes("//div[contains(@class, 'auction-item') and not(ancestor::div[contains(@class, 'auction-item')])]");
             List<Auction> auctionList = new List<Auction>();
+            var auctionCards = htmlDocument.DocumentNode.SelectNodes("//div[contains(@class, 'auction-item') and not(ancestor::div[contains(@class, 'auction-item')])]");
             foreach (var Card in auctionCards)
             {
                 Auction auctionObj = new Auction();
 
                 // Extract Title
-                var title = Card.SelectSingleNode($"div[contains(@class, 'auction-item__title')]");
-                if (title != null)
-                {
-                    await Console.Out.WriteLineAsync(title.InnerText.Trim());
-                    auctionObj.Title = title.InnerText.Trim();
-                }
-                else
-                    await Console.Out.WriteLineAsync("Title not found");
+                auctionObj.Title = await GetAuctionTitle(Card);
 
                 // Extract Description
-                var dateAndLocation = Card.SelectSingleNode($"div[contains(@class, 'auction-date-location')]");
-                var dateAndLocationItems = dateAndLocation.SelectNodes($"div[contains(@class, 'auction-date-location__item')]");
-                string desc = "";
-                foreach (var item in dateAndLocationItems)
-                {
-                    // Replace newLine in datetimelocation items with space
-                    string result = Regex.Replace(item.InnerText.Trim(), @"\r\n?|\n", " ");
-                    desc += result + "\n";
-                }
-                Console.WriteLine("DESC" + desc);
-                auctionObj.Description = desc;
+                auctionObj.Description = GetAuctionDescription(Card);
 
-                // Extract Dates
+                // Set Start And End Dates
+                var dateAndLocation = Card.SelectSingleNode($"div[contains(@class, 'auction-date-location')]");
                 var dateItem = dateAndLocation.SelectSingleNode($"div[contains(@class, 'auction-date-location__item')]");
                 SetAuctionDates(auctionObj, dateItem.InnerText.Trim());
 
                 // Extract Image-Url
-                var imageItem = Card.SelectSingleNode($"a[contains(@class, 'auction-item__image')]/img");
-                var imageUrl = imageItem.GetAttributeValue("src", null);
-                if (imageUrl.IsNullOrEmpty()) auctionObj.ImageUrl = null;
-                else auctionObj.ImageUrl = imageUrl.Trim();
+                auctionObj.ImageUrl = GetAuctionImageURL(Card);
 
-                // Extract LotCount and URL
-                var linkButton = Card.SelectSingleNode($"div[contains(@class, 'auction-item__btns')]/a");
-                var link = linkButton.GetAttributeValue("href", null);
-                Console.WriteLine(link);
-                auctionObj.Link = link.Trim();
-                var btnText = linkButton.InnerText.Trim();
-                var lotCount = ExtractNumFromStr(btnText);
-                auctionObj.LotCount = lotCount;
-                Console.WriteLine("URL "+ auctionObj.Link);
-                Console.WriteLine("LOT COUNT "+ auctionObj.LotCount);
+                // Extract Link
+                auctionObj.Link = GetAuctionLink(Card);
+
+                // Extract LotCount
+                auctionObj.LotCount = GetAuctionLotCount(Card);
 
                 //Extract Location
-                var locationItem = dateAndLocation.SelectSingleNode($"div[contains(@class, 'auction-date-location__item')][2]");
-                var locationText = locationItem.InnerText.Trim();
-                string[] locationSplits = Regex.Split(locationText, @"((Auction,)|(Auction \|))");
-                auctionObj.Location = locationSplits[locationSplits.Length - 1];
-                await Console.Out.WriteLineAsync("LOCATION " + locationSplits[locationSplits.Length-1]);
+                auctionObj.Location = GetAuctionLocation(Card);
 
-                using (IneichenContext Context = new IneichenContext())
+                auctionList.Add(auctionObj);
+            }
+            using (IneichenContext Context = new IneichenContext())
+            {
+                foreach (var auction in auctionList)
                 {
-                    Context.Auctions.Add(auctionObj);
+                    Context.Auctions.Add(auction);
                     Context.SaveChanges();
                 }
             }
+        }
+        public static async Task BuildHtmlDocument(string url, HttpClient client, HtmlDocument htmlDocument)
+        {
+            HttpResponseMessage response = await client.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                string htmlContent = await response.Content.ReadAsStringAsync();
+                // Parse the HTML content using HtmlAgilityPack
+                htmlDocument.LoadHtml(htmlContent);
+            }
+            else
+            {
+                Console.WriteLine($"Error: {response.StatusCode} - {response.ReasonPhrase}");
+            }
+        }
+        public static async Task<string> GetAuctionTitle(HtmlNode? Card)
+        {
+            string title = "";
+            if (Card != null)
+            {
+                var titleHtml = Card.SelectSingleNode($"div[contains(@class, 'auction-item__title')]");
+                if (titleHtml != null)
+                {
+                    await Console.Out.WriteLineAsync(titleHtml.InnerText.Trim());
+                    title = titleHtml.InnerText.Trim();
+                }
+                else
+                    await Console.Out.WriteLineAsync("Title not found");
+            }
+            return title;
+        }
+        public static int? GetAuctionLotCount(HtmlNode? Card)
+        {
+            int? lotCount = null;
+            if (Card != null)
+            {
+                var linkButton = Card.SelectSingleNode($"div[contains(@class, 'auction-item__btns')]/a");
+                var btnText = linkButton.InnerText.Trim();
+                lotCount = ExtractNumFromStr(btnText);
+            }
+            return lotCount;
+        }
+        public static string? GetAuctionLocation(HtmlNode? Card)
+        {
+            string? location = null;
+            if (Card != null)
+            {
+                var dateAndLocation = Card.SelectSingleNode($"div[contains(@class, 'auction-date-location')]");
+                var locationItem = dateAndLocation.SelectSingleNode($"div[contains(@class, 'auction-date-location__item')][2]");
+                var locationText = locationItem.InnerText.Trim();
+                string[] locationSplits = Regex.Split(locationText, @"((Auction,)|(Auction \|))");
+                location = locationSplits[locationSplits.Length - 1];
+            }
+            return location;
+        }
+        public static string? GetAuctionLink(HtmlNode? Card)
+        {
+            string? link = null;
+            if (Card != null)
+            {
+                var linkButton = Card.SelectSingleNode($"div[contains(@class, 'auction-item__btns')]/a");
+                link = linkButton.GetAttributeValue("href", null).Trim();
+            }
+            return link;
+        }
+        public static string? GetAuctionDescription(HtmlNode? Card)
+        {
+            string? description = null;
+            if (Card != null)
+            {
+                var dateAndLocation = Card.SelectSingleNode($"div[contains(@class, 'auction-date-location')]");
+                var dateAndLocationItems = dateAndLocation.SelectNodes($"div[contains(@class, 'auction-date-location__item')]");
+                string dateLocationConcat = "";
+                foreach (var item in dateAndLocationItems)
+                {
+                    // Replace newLine in datetimelocation items with space
+                    string result = Regex.Replace(item.InnerText.Trim(), @"\r\n?|\n", " ");
+                    dateLocationConcat += result + "\n";
+                }
+                Console.WriteLine("DESC" + dateLocationConcat);
+                description = dateLocationConcat;
+            }
+            return description;
+        }
+        public static string? GetAuctionImageURL(HtmlNode? Card)
+        {
+            string? imageURL = null;
+            if (Card != null)
+            {
+                var imageItem = Card.SelectSingleNode($"a[contains(@class, 'auction-item__image')]/img");
+                var urlStr = imageItem.GetAttributeValue("src", null);
+                if (urlStr.IsNullOrEmpty()) imageURL = null;
+                else imageURL = urlStr.Trim();
+            }
+            return imageURL;
         }
         public static void SetAuctionDates(Auction auction, string inputDateString)
         {
@@ -123,18 +184,17 @@ namespace CrawlingTask
             string startDateString = "", endDateString = "";
             SeparateDates(inputDateString, out startDateString, out endDateString);
             Console.WriteLine("START DATE STRING " + startDateString);
-            startDateObj = GetDate(startDateString.Trim());
+            startDateObj = GetDateTime(startDateString.Trim());
             if (startDateObj == null)
             {
                 endDateObj = null;
                 return;
             }
             Console.WriteLine("END DATE STRING " + endDateString);
-            endDateObj = GetDate(endDateString.Trim());
+            endDateObj = GetDateTime(endDateString.Trim());
         }
         public static void SeparateDates(string inputDates, out string startDateString, out string endDateString)
         {
-            //string[] split = Regex.Split(inputDates, @"(\(CET\))|(CET)|-");
             string[] split = inputDates.Split(Regex.Match(inputDates, @"(\(CET\))|(CET)|-").Groups[0].Value);
             startDateString = split[0];
             if (split.Length > 1)
@@ -145,7 +205,7 @@ namespace CrawlingTask
                 endDateString = "";
             return;
         }
-        public static DateClass? GetDate(string dateInnerText)
+        public static DateClass? GetDateTime(string dateInnerText)
         {
             DateClass dateObj = new DateClass();
             Regex regexDateExists = new Regex(@"^\d{1,2}");
